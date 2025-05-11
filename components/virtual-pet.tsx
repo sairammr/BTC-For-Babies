@@ -59,7 +59,7 @@ export default function VirtualPet({ level, happiness, preview = false }: Virtua
             repeatType: "reverse",
           }}
         >
-          <img src="/images/pixel-pet.png" alt="Virtual pet" className="h-full w-full object-contain" />
+          <img src="/images/pet.gif" alt="Virtual pet" className="h-full w-full object-contain" />
 
           {isFeeding && (
             <motion.div

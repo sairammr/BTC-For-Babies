@@ -14,7 +14,7 @@ export default function RewardVault({ amount }: RewardVaultProps) {
 
       <div className="flex flex-col items-center">
         <div className="relative mb-4 h-32 w-32">
-          <img src="/images/pixel-chest.png" alt="Treasure chest" className="h-full w-full object-contain" />
+          <img src="/images/chest.jpg" alt="Treasure chest" className="h-full w-full object-contain" />
 
           {/* Animated coins */}
           <motion.div
@@ -29,7 +29,7 @@ export default function RewardVault({ amount }: RewardVaultProps) {
               repeatType: "reverse",
             }}
           >
-            <img src="/images/pixel-coin.png" alt="Coin" />
+            <img src="/images/coin.jpg" alt="Coin" />
           </motion.div>
 
           <motion.div
@@ -45,7 +45,7 @@ export default function RewardVault({ amount }: RewardVaultProps) {
               repeatType: "reverse",
             }}
           >
-            <img src="/images/pixel-coin.png" alt="Coin" />
+            <img src="/images/coin.jpg" alt="Coin" />
           </motion.div>
         </div>
 

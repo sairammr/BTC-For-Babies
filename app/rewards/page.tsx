@@ -9,7 +9,7 @@ export default function RewardsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 pb-24">
-      <PageTitle title="REWARDS" icon="/images/pixel-coin.png" />
+      <PageTitle title="REWARDS" icon="/images/coin.png" />
 
       <div className="space-y-8">
         {/* Main Treasure Vault */}
@@ -18,7 +18,7 @@ export default function RewardsPage() {
 
           <div className="flex flex-col items-center">
             <div className="relative mb-6 h-48 w-48">
-              <img src="/images/pixel-chest-large.png" alt="Treasure chest" className="h-full w-full object-contain" />
+              <img src="/images/chest.png" alt="Treasure chest" className="h-full w-full object-contain scale-150" />
 
               {/* Animated coins */}
               <motion.div
@@ -33,7 +33,7 @@ export default function RewardsPage() {
                   repeatType: "reverse",
                 }}
               >
-                <img src="/images/pixel-coin.png" alt="Coin" />
+                <img src="/images/gem.png" alt="Coin" />
               </motion.div>
 
               <motion.div
@@ -49,7 +49,7 @@ export default function RewardsPage() {
                   repeatType: "reverse",
                 }}
               >
-                <img src="/images/pixel-coin.png" alt="Coin" />
+                <img src="/images/coin.png" alt="Coin" />
               </motion.div>
 
               <motion.div
@@ -65,7 +65,7 @@ export default function RewardsPage() {
                   repeatType: "reverse",
                 }}
               >
-                <img src="/images/pixel-coin.png" alt="Coin" />
+                <img src="/images/coin.png" alt="Coin" />
               </motion.div>
             </div>
 
