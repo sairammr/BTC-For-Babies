@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Users, Sparkles } from "lucide-react"
+import supabase  from "../tools/supabaseConfig"
+import GetAccountDetails from "@/hooks/getAccountdetails"
 
 interface AddChildModalProps {
   onClose: () => void
@@ -19,14 +21,25 @@ export default function AddChildModal({ onClose, onAddChild }: AddChildModalProp
   const [age, setAge] = useState("")
   const [walletAddress, setWalletAddress] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     // Create new child object
     const newChild = {
-      name: childName,
+      child_name: childName,
       age: Number.parseInt(age),
-      walletAddress: walletAddress || generateRandomWalletAddress(),
+      parent_wallet: GetAccountDetails(),
+      child_wallet: generateRandomWalletAddress(),
+    }
+
+    const {data,error} = await supabase.from("children").insert(newChild)
+
+    if(error){
+      console.log(error);
+    }
+
+    if(data){
+      console.log(data);
     }
 
     // Add the child

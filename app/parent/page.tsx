@@ -9,75 +9,61 @@ import TaskCard from "@/components/task-card"
 import ChildProfile from "@/components/child-profile"
 import SavingsVault from "@/components/savings-vault"
 import NotificationBanner from "@/components/notification-banner"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import AddTaskModal from "@/components/add-task-modal"
 import AddChildModal from "@/components/add-child-modal"
 import ConnectWalletModal from "@/components/connect-wallet-modal"
 import TaskCardV2 from "@/components/ui/task-card-v2"
 import ConnectWallet from "@/components/connectWallet"
 import { connect ,getLocalStorage,disconnect} from '@stacks/connect';
-
-// Initial data
-const initialTasks = [
-  {
-    id: "task-1",
-    title: "Clean bedroom",
-    description: "Make bed, put away toys, vacuum floor",
-    status: "pending",
-    child: "Emma",
-    reward: 0.001,
-    icon: "Broom",
-  },
-  {
-    id: "task-2",
-    title: "Homework",
-    description: "Complete math worksheet",
-    status: "completed",
-    child: "Emma",
-    reward: 0.002,
-    icon: "BookOpen",
-  },
-  {
-    id: "task-3",
-    title: "Feed the dog",
-    description: "Give Rex his dinner",
-    status: "pending",
-    child: "Jack",
-    reward: 0.0005,
-    icon: "Bone",
-  },
-]
-
-const initialChildren = [
-  {
-    id: "child-1",
-    name: "Emma",
-    age: 10,
-    tasksCompleted: 12,
-    totalRewards: 0.025,
-    walletAddress: "bc1q9h5yjvuhax8xruk7l8zuvkgvlzgwztwgf5j4xp",
-  },
-  {
-    id: "child-2",
-    name: "Jack",
-    age: 8,
-    tasksCompleted: 8,
-    totalRewards: 0.015,
-    walletAddress: "bc1q9h5yjvuhax8xruk7l8zuvkgvlzgwztwgf5j4xq",
-  },
-]
+import supabase from "@/tools/supabaseConfig"
 
 export default function Dashboard() {
   const [showAddTask, setShowAddTask] = useState(false)
   const [showAddChild, setShowAddChild] = useState(false)
   const [showConnectWallet, setShowConnectWallet] = useState(false)
-  const [tasks, setTasks] = useState(initialTasks)
-  const [children, setChildren] = useState(initialChildren)
+  const [tasks, setTasks] = useState([])
+  const [children, setChildren] = useState([])
   const [isWalletConnected, setIsWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState("")
   const [notifications, setNotifications] = useState([
     { id: "notif-1", message: "Task completed by Emma!", type: "success" as const },
   ])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchChildren = async () => {
+      try {
+        setIsLoading(true)
+        const { data, error } = await supabase
+          .from('children')
+          .select('*')
+        
+        if (error) {
+          throw error
+        }
+
+        if (data) {
+          // Map the data to match the expected format
+          const formattedChildren = data.map(child => ({
+            id: child.id,
+            name: child.child_name || '',
+            tasksCompleted: child.tasks_completed || 0,
+            totalRewards: child.total_rewards || 0,
+            walletAddress: child.wallet_address || ''
+          }))
+          setChildren(formattedChildren)
+        }
+      } catch (error) {
+        console.error('Error fetching children:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchChildren()
+  }, [])
+
   // Add a new task
   const handleAddTask = (newTask: {
     title: string;
@@ -350,7 +336,11 @@ const handleWalletDisconnect = () => {
               </Button>
             </div>
 
-            {children.length === 0 ? (
+            {isLoading ? (
+              <div className="text-center py-12">
+                <p>Loading children...</p>
+              </div>
+            ) : children.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-dashed border-[#E5E7EB]">
                 <div className="w-16 h-16 mx-auto bg-[#F5F5F5] rounded-full flex items-center justify-center mb-4">
                   <Users className="w-8 h-8 text-[#9CA3AF]" />
