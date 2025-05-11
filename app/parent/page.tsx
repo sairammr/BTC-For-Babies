@@ -14,6 +14,8 @@ import AddTaskModal from "@/components/add-task-modal"
 import AddChildModal from "@/components/add-child-modal"
 import ConnectWalletModal from "@/components/connect-wallet-modal"
 import TaskCardV2 from "@/components/ui/task-card-v2"
+import ConnectWallet from "@/components/connectWallet"
+import { connect ,getLocalStorage,disconnect} from '@stacks/connect';
 
 // Initial data
 const initialTasks = [
@@ -154,11 +156,17 @@ export default function Dashboard() {
       ...notifications,
     ])
   }
-
+const handleWalletDisconnect = () => {
+  setIsWalletConnected(false)
+  disconnect()
+}
   // Handle wallet connection
-  const handleWalletConnect = (address: string) => {
+  const handleWalletConnect = () => {
     setIsWalletConnected(true)
-    setWalletAddress(address)
+    connect()
+    const userData = getLocalStorage();
+    const walletAddr = userData?.addresses?.stx?.[0]?.address || '';
+    setWalletAddress(walletAddr);
 
     // Add notification
     setNotifications([
@@ -198,25 +206,20 @@ export default function Dashboard() {
             </button>
           </div>
 
-          <Button
-            className={`${
+          <Button className={`${
               isWalletConnected ? "bg-[#C4E4D2] hover:bg-[#C4E4D2]/80" : "bg-[#FFF4C9] hover:bg-[#FFF4C9]/80"
-            } text-[#4B5563] hidden md:flex transition-all duration-300 shadow-sm`}
-            onClick={() => setShowConnectWallet(true)}
-          >
-            <Coins className="w-4 h-4 mr-2" />
+            } text-[#4B5563] hidden md:flex transition-all duration-300 shadow-sm`} onClick={() => handleWalletConnect()}><Coins className="w-4 h-4 mr-2" />
             {isWalletConnected ? (
-              <span className="font-mono text-xs">
+              
+              <span className="font-mono text-xs" onClick={() => handleWalletDisconnect()}>
                 {walletAddress.substring(0, 4)}...{walletAddress.substring(walletAddress.length - 4)}
               </span>
             ) : (
               "Connect Wallet"
-            )}
-          </Button>
+            )}</Button> 
+          
 
-          <button className="p-2 hover:bg-[#F5F5F5] rounded-full transition-colors">
-            <Cog className="w-6 h-6 text-[#4B5563]" />
-          </button>
+            
         </div>
       </header>
 
@@ -471,9 +474,9 @@ export default function Dashboard() {
 
       {showAddChild && <AddChildModal onClose={() => setShowAddChild(false)} onAddChild={handleAddChild} />}
 
-      {showConnectWallet && (
-        <ConnectWalletModal onClose={() => setShowConnectWallet(false)} onConnect={handleWalletConnect} />
-      )}
+   
+
+      
     </div>
   )
 }
