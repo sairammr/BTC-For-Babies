@@ -64,9 +64,7 @@ export default function TaskCard({ id, icon, title, points, message, progress, c
 
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 p-2">
-            <img src={icon || "/placeholder.svg"} alt={title} className="h-full w-full object-contain" />
-          </div>
+         
           <h3 className="font-arcade text-lg text-purple-800">{title}</h3>
         </div>
         <div className="rounded-full bg-yellow-100 px-2 py-1">

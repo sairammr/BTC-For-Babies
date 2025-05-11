@@ -1,110 +1,96 @@
-import Link from "next/link"
+"use client"
+
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import TaskCard from "@/components/task-card"
-import RewardVault from "@/components/reward-vault"
-import VirtualPet from "@/components/virtual-pet"
-import { AchievementBadge } from "@/components/achievement-badge"
 import PageTitle from "@/components/page-title"
 import PixelatedContainer from "@/components/pixelated-container"
+import { useTaskStore } from "@/lib/task-store"
 
 export default function HomePage() {
+  const { tasks, completedTasks } = useTaskStore()
+  const [activeTab, setActiveTab] = useState<"todo" | "done">("todo")
+
   return (
     <div className="container mx-auto px-4 py-8 pb-24">
-      {/* Header */}
-      <header className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="h-12 w-12 overflow-hidden rounded-lg border-2 border-purple-400 bg-white p-1 shadow-md">
-            <img src="/images/pixel-avatar.png" alt="Player avatar" className="h-full w-full object-contain" />
-          </div>
-          <div>
-            <h2 className="font-arcade text-lg text-purple-800">PLAYER ONE</h2>
-            <div className="flex items-center gap-1">
-              <div className="h-4 w-4">
-                <img src="/images/pixel-star.png" alt="Level" />
-              </div>
-              <p className="font-arcade text-xs text-purple-600">LEVEL 5</p>
-            </div>
-          </div>
-        </div>
-        <Button className="bg-pink-400 font-arcade text-white hover:bg-pink-500">SETTINGS</Button>
-      </header>
+      <PageTitle title={`Hi! ${name}`} icon="/images/boy.png" />
 
-      {/* Main Content */}
-      <main className="space-y-8">
-        <PageTitle title="DASHBOARD" icon="/images/pixel-dashboard.png" />
-
-        {/* Tasks Preview Section */}
-        <PixelatedContainer className="bg-white/80 backdrop-blur-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-arcade text-xl text-purple-800">LATEST QUESTS</h2>
-            <Link href="/quests">
-              <Button
-                variant="outline"
-                className="border-2 border-purple-300 bg-purple-100 font-arcade text-purple-700"
-              >
-                VIEW ALL
-              </Button>
-            </Link>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <TaskCard
-              id="1"
-              icon="/images/pixel-broom.png"
-              title="Clean Room!"
-              points={5}
-              message="Make your bed and pick up toys"
-              progress={75}
-            />
-            <TaskCard
-              id="2"
-              icon="/images/pixel-book.png"
-              title="Read Book"
-              points={3}
-              message="Read for 20 minutes"
-              progress={50}
-            />
-          </div>
-        </PixelatedContainer>
-
-        {/* Rewards and Pet Preview */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <Link href="/rewards" className="block transition-transform hover:scale-[1.02]">
-            <RewardVault amount={25} />
-          </Link>
-
-          <Link href="/pet" className="block transition-transform hover:scale-[1.02]">
-            <PixelatedContainer className="bg-gradient-to-b from-mint-100 to-mint-200">
-              <h2 className="mb-2 font-arcade text-xl text-mint-800">YOUR PET</h2>
-              <VirtualPet level={3} happiness={80} preview={true} />
-            </PixelatedContainer>
-          </Link>
-        </div>
-
-        {/* Achievements Section */}
-        <PixelatedContainer className="bg-white/80 backdrop-blur-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-arcade text-xl text-purple-800">ACHIEVEMENTS</h2>
-            <Button variant="outline" className="border-2 border-purple-300 bg-purple-100 font-arcade text-purple-700">
-              VIEW ALL
+      <PixelatedContainer className="bg-white/80 backdrop-blur-sm">
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="font-arcade text-2xl text-purple-800">MY QUESTS</h2>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className={`border-2 font-arcade ${
+                activeTab === "todo"
+                  ? "border-blue-300 bg-blue-100 text-blue-700"
+                  : "border-gray-300 bg-white text-gray-700"
+              }`}
+              onClick={() => setActiveTab("todo")}
+            >
+              TO DO
+            </Button>
+            <Button
+              variant="outline"
+              className={`border-2 font-arcade ${
+                activeTab === "done"
+                  ? "border-green-300 bg-green-100 text-green-700"
+                  : "border-gray-300 bg-white text-gray-700"
+              }`}
+              onClick={() => setActiveTab("done")}
+            >
+              DONE
             </Button>
           </div>
-          <div className="flex flex-wrap gap-4">
-            <AchievementBadge
-              icon="/images/pixel-trophy.png"
-              title="SUPER CLEANER"
-              description="Cleaned room 5 times"
-              unlocked
-            />
-            <AchievementBadge
-              icon="/images/pixel-book-stack.png"
-              title="BOOKWORM"
-              description="Read 10 books"
-              unlocked
-            />
-            <AchievementBadge icon="/images/pixel-streak.png" title="ON FIRE" description="5 day streak" unlocked />
+        </div>
+
+        {activeTab === "todo" ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {tasks.length > 0 ? (
+              tasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  id={task.id}
+                  icon={task.icon}
+                  title={task.title}
+                  points={task.points}
+                  message={task.message}
+                  progress={task.progress}
+                />
+              ))
+            ) : (
+              <div className="col-span-2 rounded-lg border-2 border-dashed border-purple-200 p-8 text-center">
+                <img src="/images/duck.png" alt="No tasks" className="mx-auto mb-4 h-24 w-24" />
+                <h3 className="mb-2 font-arcade text-lg text-purple-700">NO QUESTS YET!</h3>
+                <p className="text-purple-600">All your quests are completed. Great job!</p>
+              </div>
+            )}
           </div>
-        </PixelatedContainer>
-      </main>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {completedTasks.length > 0 ? (
+              completedTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  id={task.id}
+                  icon={task.icon}
+                  title={task.title}
+                  points={task.points}
+                  message={task.message}
+                  progress={100}
+                  completed
+                />
+              ))
+            ) : (
+              <div className="col-span-2 rounded-lg border-2 border-dashed border-purple-200 p-8 text-center">
+                <img src="/images/duck.png" alt="No completed tasks" className="mx-auto mb-4 h-24 w-24" />
+                <h3 className="mb-2 font-arcade text-lg text-purple-700">NO COMPLETED QUESTS</h3>
+                <p className="text-purple-600">Complete some quests to see them here!</p>
+              </div>
+            )}
+          </div>
+        )}
+      </PixelatedContainer>
     </div>
   )
 }

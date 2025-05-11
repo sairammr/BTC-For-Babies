@@ -1,4 +1,8 @@
+"use client"
+
 import type React from "react"
+import { usePathname, useRouter } from "next/navigation"
+import { useEffect } from "react"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import Navigation from "@/components/navigation"
@@ -9,6 +13,21 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const pathname = usePathname()
+  const router = useRouter()
+
+  useEffect(() => {
+    // For demo purposes, we'll just check if we're on the login page
+    // In a real app, you'd want to check for a valid auth token/session
+    const isAuthenticated = localStorage.getItem("isAuthenticated")
+    if (!isAuthenticated && pathname !== "/login") {
+      router.push("/login")
+    }
+  }, [pathname, router])
+
+  // Don't show navigation on login page
+  const showNavigation = pathname !== "/login" && pathname !== "/parent"
+
   return (
     <html lang="en">
       <head>
@@ -19,7 +38,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <TaskProvider>
             {children}
-            <Navigation />
+            {showNavigation && <Navigation />}
           </TaskProvider>
         </ThemeProvider>
       </body>

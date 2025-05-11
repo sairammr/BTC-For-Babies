@@ -2,10 +2,14 @@
 
 import PageTitle from "@/components/page-title"
 import PixelatedContainer from "@/components/pixelated-container"
+import AgeProgressBar from "@/components/age-progress-bar"
 import { motion } from "framer-motion"
 
 export default function RewardsPage() {
   const totalAmount = 25
+  const currentAge = 8
+  const targetAge = 18
+  const progress = ((currentAge - 5) / (targetAge - 5)) * 100 // Assuming starting age is 5
 
   return (
     <div className="container mx-auto px-4 py-8 pb-24">
@@ -33,7 +37,7 @@ export default function RewardsPage() {
                   repeatType: "reverse",
                 }}
               >
-                <img src="/images/gem.png" alt="Coin" />
+                <img src="/images/coin.png" alt="Coin" />
               </motion.div>
 
               <motion.div
@@ -78,40 +82,8 @@ export default function RewardsPage() {
               earn more coins!
             </p>
 
-            {/* Timeline */}
-            <div className="mt-4 w-full max-w-lg">
-              <div className="relative h-12">
-                <div className="absolute inset-0 h-4 translate-y-4 rounded-full bg-yellow-300"></div>
-
-                {/* Current position */}
-                <motion.div
-                  className="absolute left-0 top-0 flex h-12 w-12 items-center justify-center"
-                  style={{ left: "20%" }}
-                  animate={{ y: [0, -3, 0] }}
-                  transition={{
-                    duration: 1.5,
-                    repeat: Number.POSITIVE_INFINITY,
-                    repeatType: "reverse",
-                  }}
-                >
-                  <div className="h-10 w-10 rounded-full bg-white p-1 shadow-md">
-                    <img src="/images/pixel-character.png" alt="You are here" />
-                  </div>
-                </motion.div>
-
-                {/* End goal */}
-                <div className="absolute right-0 top-0 flex h-12 w-12 items-center justify-center">
-                  <div className="h-10 w-10 rounded-full bg-yellow-500 p-1 shadow-md">
-                    <img src="/images/pixel-flag.png" alt="Goal" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-2 flex justify-between">
-                <span className="font-arcade text-sm text-yellow-700">NOW</span>
-                <span className="font-arcade text-sm text-yellow-700">AGE 18</span>
-              </div>
-            </div>
+            {/* Age Progress Bar */}
+            <AgeProgressBar currentAge={currentAge} targetAge={targetAge} progress={progress} />
           </div>
         </PixelatedContainer>
 
@@ -120,10 +92,10 @@ export default function RewardsPage() {
           <h2 className="mb-4 font-arcade text-xl text-purple-800">RECENT REWARDS</h2>
 
           <div className="space-y-3">
-            <RewardHistoryItem icon="/images/pixel-broom.png" title="Clean Room!" amount={5} date="Today" />
-            <RewardHistoryItem icon="/images/pixel-book.png" title="Read Book" amount={3} date="Yesterday" />
-            <RewardHistoryItem icon="/images/pixel-dish.png" title="Help with Dishes" amount={4} date="3 days ago" />
-            <RewardHistoryItem icon="/images/pixel-toothbrush.png" title="Brush Teeth" amount={2} date="4 days ago" />
+            <RewardHistoryItem title="Clean Room!" amount={5} date="Today" />
+            <RewardHistoryItem title="Read Book" amount={3} date="Yesterday" />
+            <RewardHistoryItem title="Help with Dishes" amount={4} date="3 days ago" />
+            <RewardHistoryItem title="Brush Teeth" amount={2} date="4 days ago" />
           </div>
         </PixelatedContainer>
       </div>
@@ -132,26 +104,23 @@ export default function RewardsPage() {
 }
 
 interface RewardHistoryItemProps {
-  icon: string
   title: string
   amount: number
   date: string
 }
 
-function RewardHistoryItem({ icon, title, amount, date }: RewardHistoryItemProps) {
+function RewardHistoryItem({  title, amount, date }: RewardHistoryItemProps) {
   return (
     <div className="flex items-center justify-between rounded-lg border-2 border-yellow-200 bg-yellow-50 p-3 shadow-sm">
       <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-yellow-100 p-2">
-          <img src={icon || "/placeholder.svg"} alt={title} className="h-full w-full object-contain" />
-        </div>
+        
         <div>
           <h4 className="font-arcade text-sm text-yellow-800">{title}</h4>
           <p className="text-xs text-yellow-600">{date}</p>
         </div>
       </div>
       <div className="flex items-center gap-1 rounded-full bg-yellow-200 px-3 py-1">
-        <img src="/images/pixel-coin-small.png" alt="Coins" className="h-4 w-4" />
+        <img src="/images/coin.png" alt="Coins" className="h-4 w-4" />
         <span className="font-arcade text-sm text-yellow-800">+{amount}</span>
       </div>
     </div>
