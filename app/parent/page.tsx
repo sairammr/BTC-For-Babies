@@ -17,13 +17,23 @@ import TaskCardV2 from "@/components/ui/task-card-v2"
 import ConnectWallet from "@/components/connectWallet"
 import { connect ,getLocalStorage,disconnect} from '@stacks/connect';
 import supabase from "@/tools/supabaseConfig"
+import GetAccountDetails from "@/hooks/getAccountdetails"
+import { generateWallet, generateSecretKey, generateNewAccount, getStxAddress } from '@stacks/wallet-sdk';
+
+interface Child {
+  id: string;
+  name: string;
+  tasksCompleted: number;
+  totalRewards: number;
+  walletAddress: string;
+}
 
 export default function Dashboard() {
   const [showAddTask, setShowAddTask] = useState(false)
   const [showAddChild, setShowAddChild] = useState(false)
   const [showConnectWallet, setShowConnectWallet] = useState(false)
   const [tasks, setTasks] = useState([])
-  const [children, setChildren] = useState([])
+  const [children, setChildren] = useState<Child[]>([])
   const [isWalletConnected, setIsWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState("")
   const [notifications, setNotifications] = useState([
@@ -48,9 +58,9 @@ export default function Dashboard() {
           const formattedChildren = data.map(child => ({
             id: child.id,
             name: child.child_name || '',
-            tasksCompleted: child.tasks_completed || 0,
-            totalRewards: child.total_rewards || 0,
-            walletAddress: child.wallet_address || ''
+            tasksCompleted:0,
+            totalRewards: 0,
+            walletAddress: child.child_wallet || ''
           }))
           setChildren(formattedChildren)
         }
@@ -90,29 +100,88 @@ export default function Dashboard() {
     ])
   }
 
+  
+
+
+
   // Add a new child
-  const handleAddChild = (newChild: {
+  const handleAddChild = async (newChild: {
     name: string;
     age: number;
+    password: string;
   }) => {
-    const childWithId = {
-      ...newChild,
-      id: `child-${Date.now()}`,
-      tasksCompleted: 0,
-      totalRewards: 0,
-      walletAddress: "",
-    }
-    setChildren([...children, childWithId])
+    try {
+      const parentWallet = GetAccountDetails() || "";
 
-    // Add notification
-    setNotifications([
-      {
-        id: `notif-${Date.now()}`,
-        message: `${newChild.name} added to your family!`,
-        type: "success",
-      },
-      ...notifications,
-    ])
+
+
+      async function createWallet(){
+        
+        const secretKey = generateSecretKey();
+      
+        let wallet = await generateWallet({
+          secretKey,
+          password: newChild.password,
+        });
+        const account = wallet.accounts[0]; 
+        // Get the address from the private key
+        const testnetAddress = getStxAddress(account, 'testnet');
+        // console.log('private key', account.stxPrivateKey);
+        // console.log('Wallet Address:', testnetAddress);
+        // console.log('Wallet Details:', wallet.accounts[0]);
+        return testnetAddress;
+      }
+      
+
+      const { data, error } = await supabase
+        .from('children')
+        .insert([{
+          child_name: newChild.name,
+          age: newChild.age,
+          parent_wallet: parentWallet,
+          child_wallet: await createWallet()
+        }])
+        .select()
+
+      if (error) {
+        console.error('Supabase error:', error.message)
+        throw new Error(error.message)
+      }
+
+      if (!data || data.length === 0) {
+        throw new Error('No data returned from insert')
+      }
+
+      // Format and add the new child directly
+      const newFormattedChild: Child = {
+        id: data[0].id,
+        name: data[0].child_name,
+        tasksCompleted: 0,
+        totalRewards: 0,
+        walletAddress: data[0].child_wallet || ''
+      }
+
+      setChildren(prev => [...prev, newFormattedChild])
+      setShowAddChild(false)
+      setNotifications([
+        {
+          id: `notif-${Date.now()}`,
+          message: `${newChild.name} added to your family!`,
+          type: "success",
+        },
+        ...notifications,
+      ])
+    } catch (error) {
+      console.error('Error adding child:', error)
+      setNotifications([
+        {
+          id: `notif-${Date.now()}`,
+          message: "Failed to add child. Please try again.",
+          type: "error",
+        },
+        ...notifications,
+      ])
+    }
   }
 
   // Update task

@@ -10,6 +10,8 @@ interface ChildProfileProps {
 }
 
 export default function ChildProfile({ name, tasksCompleted, totalRewards }: ChildProfileProps) {
+  if (!name) return null;
+
   return (
     <Card className="border-[#C9E4FF] shadow-sm hover:shadow transition-all duration-200">
       <CardContent className="p-4">

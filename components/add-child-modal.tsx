@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Users, Sparkles } from "lucide-react"
 import supabase  from "../tools/supabaseConfig"
 import GetAccountDetails from "@/hooks/getAccountdetails"
+import { generateWallet, generateSecretKey, generateNewAccount, getStxAddress } from '@stacks/wallet-sdk';
 
 interface AddChildModalProps {
   onClose: () => void
@@ -20,35 +21,41 @@ export default function AddChildModal({ onClose, onAddChild }: AddChildModalProp
   const [childName, setChildName] = useState("")
   const [age, setAge] = useState("")
   const [walletAddress, setWalletAddress] = useState("")
+  const [password, setPassword] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     // Create new child object
     const newChild = {
-      child_name: childName,
+      name: childName,
       age: Number.parseInt(age),
-      parent_wallet: GetAccountDetails(),
-      child_wallet: generateRandomWalletAddress(),
+      password: password,
     }
 
-    const {data,error} = await supabase.from("children").insert(newChild)
-
-    if(error){
-      console.log(error);
-    }
-
-    if(data){
-      console.log(data);
-    }
-
-    // Add the child
+    // Call the parent's onAddChild with the correct data
     onAddChild(newChild)
 
     // Close the modal
     onClose()
   }
 
+
+  async function createWallet(){
+    const secretKey = generateSecretKey();
+    let wallet = await generateWallet({
+      secretKey,
+      password,
+    });
+    const account = wallet.accounts[0];
+    // Get the address from the private key
+    const testnetAddress = getStxAddress(account, 'testnet');
+    //console.log('private key', account.stxPrivateKey);
+    //console.log('Wallet Address:', testnetAddress);
+    //console.log('Wallet Details:', wallet.accounts[0]);
+    return testnetAddress;
+  }
+  
   // Generate a random Bitcoin wallet address for demo purposes
   const generateRandomWalletAddress = () => {
     const chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -105,17 +112,17 @@ export default function AddChildModal({ onClose, onAddChild }: AddChildModalProp
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="walletAddress" className="text-[#4B5563]">
-                Escrow Wallet Address (Optional)
+              <Label htmlFor="password" className="text-[#4B5563]">
+                Password for child's wallet
               </Label>
               <Input
-                id="walletAddress"
-                value={walletAddress}
-                onChange={(e) => setWalletAddress(e.target.value)}
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="border-[#F8C6D2] focus:ring-[#F8C6D2] font-mono text-sm shadow-sm"
-                placeholder="bc1..."
+                placeholder="password"
               />
-              <p className="text-xs text-[#6B7280]">Leave blank to auto-generate a new escrow wallet</p>
+              <p className="text-xs text-[#6B7280]">Leave blank to auto-generate a new wallet</p>
             </div>
           </div>
 
