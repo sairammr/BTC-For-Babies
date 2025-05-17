@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Users, Sparkles } from "lucide-react"
 import supabase  from "../tools/supabaseConfig"
 import GetAccountDetails from "@/hooks/getAccountdetails"
-import { generateWallet, generateSecretKey, generateNewAccount, getStxAddress } from '@stacks/wallet-sdk';
+import { ethers } from 'ethers'
 
 interface AddChildModalProps {
   onClose: () => void
@@ -30,32 +30,34 @@ export default function AddChildModal({ onClose, onAddChild }: AddChildModalProp
     const newChild = {
       name: childName,
       age: Number.parseInt(age),
-      password: password,
+      parent_wallet: GetAccountDetails(),
+      child_wallet: await createWallet(),
+      password: password
     }
 
-    // Call the parent's onAddChild with the correct data
+    const {data,error} = await supabase.from("children").insert(newChild)
+
+    // Add the child
     onAddChild(newChild)
 
     // Close the modal
     onClose()
   }
 
-
-  async function createWallet(){
-    const secretKey = generateSecretKey();
-    let wallet = await generateWallet({
-      secretKey,
-      password,
-    });
-    const account = wallet.accounts[0];
-    // Get the address from the private key
-    const testnetAddress = getStxAddress(account, 'testnet');
-    //console.log('private key', account.stxPrivateKey);
-    //console.log('Wallet Address:', testnetAddress);
-    //console.log('Wallet Details:', wallet.accounts[0]);
-    return testnetAddress;
+  async function createWallet() {
+    // Create a new random wallet
+    const wallet = ethers.Wallet.createRandom();
+    
+    // If password is provided, encrypt the wallet
+    if (password) {
+      const encryptedWallet = await wallet.encrypt(password);
+      // You might want to store this encrypted wallet somewhere secure
+      return wallet.address;
+    }
+    
+    return wallet.address;
   }
-  
+
   // Generate a random Bitcoin wallet address for demo purposes
   const generateRandomWalletAddress = () => {
     const chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"

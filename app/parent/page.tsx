@@ -14,11 +14,9 @@ import AddTaskModal from "@/components/add-task-modal"
 import AddChildModal from "@/components/add-child-modal"
 import ConnectWalletModal from "@/components/connect-wallet-modal"
 import TaskCardV2 from "@/components/ui/task-card-v2"
-import ConnectWallet from "@/components/connectWallet"
-import { connect ,getLocalStorage,disconnect} from '@stacks/connect';
-import supabase from "@/tools/supabaseConfig"
+import supabase  from "../../tools/supabaseConfig"
+import { ethers } from 'ethers'
 import GetAccountDetails from "@/hooks/getAccountdetails"
-import { generateWallet, generateSecretKey, generateNewAccount, getStxAddress } from '@stacks/wallet-sdk';
 
 interface Child {
   id: string;
@@ -27,6 +25,19 @@ interface Child {
   totalRewards: number;
   walletAddress: string;
 }
+
+// Update ExSat network configuration with exact details
+const exsatTestnet = {
+  chainId: '0xCD13F', // Using hexadecimal format
+  chainName: 'exSat Testnet',
+  nativeCurrency: {
+    name: 'exSat',
+    symbol: 'BTC',
+    decimals: 18
+  },
+  rpcUrls: ['https://evm-tst3.exsat.network'],
+  blockExplorerUrls: ['https://scan-testnet.exsat.network']
+};
 
 export default function Dashboard() {
   const [showAddTask, setShowAddTask] = useState(false)
@@ -40,6 +51,7 @@ export default function Dashboard() {
     { id: "notif-1", message: "Task completed by Emma!", type: "success" as const },
   ])
   const [isLoading, setIsLoading] = useState(true)
+  const [parentWallet, setParentWallet] = useState("");
 
   useEffect(() => {
     const fetchChildren = async () => {
@@ -74,6 +86,12 @@ export default function Dashboard() {
     fetchChildren()
   }, [])
 
+  // Add this useEffect for wallet initialization
+  useEffect(() => {
+    const wallet = GetAccountDetails();
+    setParentWallet(wallet);
+  }, []);
+
   // Add a new task
   const handleAddTask = (newTask: {
     title: string;
@@ -100,10 +118,6 @@ export default function Dashboard() {
     ])
   }
 
-  
-
-
-
   // Add a new child
   const handleAddChild = async (newChild: {
     name: string;
@@ -111,27 +125,13 @@ export default function Dashboard() {
     password: string;
   }) => {
     try {
-      const parentWallet = GetAccountDetails() || "";
-
-
-
-      async function createWallet(){
-        
-        const secretKey = generateSecretKey();
-      
-        let wallet = await generateWallet({
-          secretKey,
-          password: newChild.password,
-        });
-        const account = wallet.accounts[0]; 
-        // Get the address from the private key
-        const testnetAddress = getStxAddress(account, 'testnet');
-        // console.log('private key', account.stxPrivateKey);
-        // console.log('Wallet Address:', testnetAddress);
-        // console.log('Wallet Details:', wallet.accounts[0]);
-        return testnetAddress;
+      if (!parentWallet) {
+        throw new Error('Please connect your wallet first');
       }
-      
+
+      // Create a new ExSat wallet using ethers.js
+      const wallet = ethers.Wallet.createRandom();
+      const childWalletAddress = wallet.address;
 
       const { data, error } = await supabase
         .from('children')
@@ -139,7 +139,8 @@ export default function Dashboard() {
           child_name: newChild.name,
           age: newChild.age,
           parent_wallet: parentWallet,
-          child_wallet: await createWallet()
+          child_wallet: childWalletAddress,
+          password: newChild.password
         }])
         .select()
 
@@ -152,7 +153,7 @@ export default function Dashboard() {
         throw new Error('No data returned from insert')
       }
 
-      // Format and add the new child directly
+      // Format and add the new child
       const newFormattedChild: Child = {
         id: data[0].id,
         name: data[0].child_name,
@@ -213,26 +214,104 @@ export default function Dashboard() {
   }
 const handleWalletDisconnect = () => {
   setIsWalletConnected(false)
-  disconnect()
+  setWalletAddress("")
 }
   // Handle wallet connection
-  const handleWalletConnect = () => {
-    setIsWalletConnected(true)
-    connect()
-    const userData = getLocalStorage();
-    const walletAddr = userData?.addresses?.stx?.[0]?.address || '';
-    setWalletAddress(walletAddr);
+  const handleWalletConnect = async () => {
+    try {
+      if (typeof window.ethereum === 'undefined') {
+        throw new Error('Please install MetaMask');
+      }
 
-    // Add notification
-    setNotifications([
-      {
-        id: `notif-${Date.now()}`,
-        message: "Wallet connected successfully!",
-        type: "success",
-      },
-      ...notifications,
-    ])
-  }
+      // First, request account access and wait for user confirmation
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_requestAccounts' 
+      });
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts found');
+      }
+
+      // Check if we're already on the correct network
+      const chainId = await window.ethereum.request({ 
+        method: 'eth_chainId' 
+      });
+
+      // If we're not on the correct network, try to switch
+      if (chainId !== '0xCD13F') {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0xCD13F' }] // 839999 in hex
+          });
+        } catch (switchError: any) {
+          // If network doesn't exist, add it
+          if (switchError.code === 4902) {
+            const addChainParams = {
+              chainId: '0xCD13F', // 839999 in hex
+              chainName: 'exSat Testnet',
+              nativeCurrency: {
+                name: 'exSat',
+                symbol: 'BTC',
+                decimals: 18
+              },
+              rpcUrls: ['https://evm-tst3.exsat.network'],
+              blockExplorerUrls: ['https://scan-testnet.exsat.network']
+            };
+
+            // Request to add the network and wait for user confirmation
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [addChainParams]
+            });
+
+            // After adding, try switching again and wait for confirmation
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0xCD13F' }] // 839999 in hex
+            });
+          } else {
+            throw switchError;
+          }
+        }
+      }
+
+      // Only set connection state after all confirmations are complete
+      setIsWalletConnected(true);
+      setWalletAddress(accounts[0]);
+      setParentWallet(accounts[0]);
+      setShowConnectWallet(false);
+
+      // Show success message
+      setNotifications([
+        {
+          id: `notif-${Date.now()}`,
+          message: "Wallet connected to exSat Testnet successfully!",
+          type: "success",
+        },
+        ...notifications,
+      ]);
+    } catch (error: any) {
+      console.error('Error connecting wallet:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      
+      // Reset connection state on error
+      setIsWalletConnected(false);
+      setWalletAddress("");
+      
+      setNotifications([
+        {
+          id: `notif-${Date.now()}`,
+          message: error.message || "Failed to connect wallet. Please try again.",
+          type: "error",
+        },
+        ...notifications,
+      ]);
+    }
+  };
 
   // Remove notification
   const removeNotification = (id: string) => {
@@ -240,7 +319,7 @@ const handleWalletDisconnect = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5] bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0wIDBoNDB2NDBoLTQweiIvPjxwYXRoIGQ9Ik0zNiA0djRoLTR2LTRoNHptLTggMHY0aC00di00aDR6bS04IDB2NGgtNHYtNGg0em0tOCAwdjRoLTR2LTRoNHptLTggMHY0aC00di00aDR6bTMyIDh2NGgtNHYtNGg0em0tMzIgMHY0aC00di00aDR6bTMyIDh2NGgtNHYtNGg0em0tMzIgMHY0aC00di00aDR6bTMyIDh2NGgtNHYtNGg0em0tMzIgMHY0aC00di00aDR6bTMyIDh2NGgtNHYtNGg0em0tOCAwdjRoLTR2LTRoNHptLTggMHY0aC00di00aDR6bS04IDB2NGgtNHYtNGg0em0tOCAwdjRoLTR2LTRoNHoiIGZpbGw9IiNGOEM2RDIiIGZpbGwtb3BhY2l0eT0iLjAyIi8+PC9nPjwvc3ZnPg==')] font-sans">
+    <div className="min-h-screen bg-[#F5F5F5] bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0wIDBoNDB2NDBoLTQweiIvPjxwYXRoIGQ9Ik0zNiA0djRoLTR2LTRoNHptLTggMHY0aC00di00aDR6bS04IDB2NGgtNHYtNGg0em0tOCAwdjRoLTR2LTRoNHptLTggMHY0aC00di00aDR6bTMyIDh2NGgtNHYtNGg0em0tMzIgMHY0aC00di00aDR6bTMyIDh2NGgtNHYtNGg0em0tMzIgMHY0aC00di00aDR6bTMyIDh2NGgtNHYtNGg0em0tOCAwdjRoLTR2LTRoNHptLTggMHY0aC00di00aDR6bS04IDB2NGgtNHYtNGg0em0tOCAwdjRoLTR2LTRoNHoiIGZpbGw9IiNGOEM2RDIiIGZpbGwtb3BhY2l0eT0iLjAyIi8+PC9nPjwvc3ZnPg==')] font-sans">
       {/* Header */}
       <header className="h-16 bg-white border-b border-[#E5E7EB] px-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center">
@@ -263,18 +342,25 @@ const handleWalletDisconnect = () => {
 
           <Button className={`${
               isWalletConnected ? "bg-[#C4E4D2] hover:bg-[#C4E4D2]/80" : "bg-[#FFF4C9] hover:bg-[#FFF4C9]/80"
-            } text-[#4B5563] hidden md:flex transition-all duration-300 shadow-sm`} onClick={() => handleWalletConnect()}><Coins className="w-4 h-4 mr-2" />
+            } text-[#4B5563] hidden md:flex transition-all duration-300 shadow-sm`} onClick={() => handleWalletConnect()}>
+            <Coins className="w-4 h-4 mr-2" />
             {isWalletConnected ? (
-              
-              <span className="font-mono text-xs" onClick={() => handleWalletDisconnect()}>
+              <span className="font-mono text-xs">
                 {walletAddress.substring(0, 4)}...{walletAddress.substring(walletAddress.length - 4)}
               </span>
             ) : (
               "Connect Wallet"
-            )}</Button> 
+            )}
+          </Button>
           
-
-            
+          {isWalletConnected && (
+            <Button 
+              className="bg-red-500 hover:bg-red-600 text-white hidden md:flex transition-all duration-300 shadow-sm"
+              onClick={handleWalletDisconnect}
+            >
+              Disconnect
+            </Button>
+          )}
         </div>
       </header>
 
