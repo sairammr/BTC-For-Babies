@@ -4,10 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Bell, CheckCircle, Clipboard, Cog, Coins, Home, Plus, Users, X } from "lucide-react"
-import TaskCard from "@/components/task-card"
-import ChildProfile from "@/components/child-profile"
-import SavingsVault from "@/components/savings-vault"
+import { Bell, CheckCircle, Clipboard, Coins, Home, Plus, Users, X } from "lucide-react"
 import NotificationBanner from "@/components/notification-banner"
 import { useEffect, useState } from "react"
 import AddTaskModal from "@/components/add-task-modal"
@@ -16,10 +13,12 @@ import ConnectWalletModal from "@/components/connect-wallet-modal"
 import TaskCardV2 from "@/components/ui/task-card-v2"
 import supabase from "../../tools/supabaseConfig"
 import { ethers } from 'ethers'
+import taskRegistryABI from '../abi/taskRegistry.json'
+
+// Contract address (from stacks-sample)
+const TASK_REGISTRY_ADDRESS = '0x9404078DD16F12C7527215feEEcF4fF86F96DA3c';
+
 import GetAccountDetails from "@/hooks/getAccountdetails"
-import { useRouter } from "next/navigation"
-import PageTitle from "@/components/page-title"
-import PixelatedContainer from "@/components/pixelated-container"
 
 interface Child {
   id: string;
@@ -41,17 +40,6 @@ interface Task {
 }
 
 // Update ExSat network configuration with exact details
-const exsatTestnet = {
-  chainId: '0xCD13F', // Using hexadecimal format
-  chainName: 'exSat Testnet',
-  nativeCurrency: {
-    name: 'exSat',
-    symbol: 'BTC',
-    decimals: 18
-  },
-  rpcUrls: ['https://evm-tst3.exsat.network'],
-  blockExplorerUrls: ['https://scan-testnet.exsat.network']
-};
 
 export default function Dashboard() {
   const [showAddTask, setShowAddTask] = useState(false)
@@ -61,14 +49,19 @@ export default function Dashboard() {
   const [children, setChildren] = useState<Child[]>([])
   const [isWalletConnected, setIsWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState("")
-  const [notifications, setNotifications] = useState([
-    { id: "notif-1", message: "Task completed by Emma!", type: "success" as const },
+  type NotificationType = "success" | "error";
+  interface Notification {
+    id: string;
+    message: string;
+    type: NotificationType;
+  }
+  const [notifications, setNotifications] = useState<Notification[]>([
+    { id: "notif-1", message: "Task completed by Emma!", type: "success" },
   ])
   const [isLoading, setIsLoading] = useState(true)
   const [parentWallet, setParentWallet] = useState("")
   const [activeTab, setActiveTab] = useState<"all" | "review" | "completed">("all")
   const [activeTaskFilter, setActiveTaskFilter] = useState<"all" | "pending" | "completed" | "review">("all")
-  const router = useRouter()
 
   useEffect(() => {
     const fetchChildren = async () => {
@@ -151,48 +144,128 @@ export default function Dashboard() {
     icon: string;
   }) => {
     // Find the child's name from the children array
-    const child = children.find(child => String(child.id) === newTask.child);
+    const child = children.find((c) => String(c.id) === newTask.child);
     if (!child) {
-      console.error('Child not found:', newTask.child);
+      setNotifications([
+        {
+          id: `notif-${Date.now()}`,
+          message: `Child not found: ${newTask.child}`,
+          type: "error",
+        },
+        ...notifications,
+      ]);
       return;
     }
 
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert([{
-        id:newTask.child,
-        title:newTask.title,
-        description:newTask.description,
-        reward:newTask.reward,
-      }])
-      .select()
+    // Blockchain interaction: createTask
+    try {
+      if (typeof window.ethereum === 'undefined') {
+        setNotifications([
+          { id: `notif-${Date.now()}`, message: 'Please install MetaMask', type: 'error' }, ...notifications ]);
+        return;
+      }
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(
+        TASK_REGISTRY_ADDRESS,
+        taskRegistryABI.output.abi,
+        signer
+      );
+      const childWallet = child.walletAddress;
+      const amount = ethers.parseEther(newTask.reward.toString());
+      const tx = await contract.createTask(childWallet, amount, { value: amount });
+      const receipt = await tx.wait();
 
-    if (error) {
-      console.error('Supabase error:', error.message)
-      throw new Error(error.message)
+      // Find TaskCreated event in logs
+      let taskId: number | undefined;
+      for (const log of receipt.logs) {
+        try {
+          const parsedLog = contract.interface.parseLog({
+            topics: log.topics,
+            data: log.data,
+          });
+          if (parsedLog && parsedLog.name === 'TaskCreated') {
+            taskId = Number(parsedLog.args.taskId);
+            break;
+          }
+        } catch {}
+      }
+      if (!taskId) {
+        setNotifications([
+          { id: `notif-${Date.now()}`, message: 'Could not extract taskId from contract event', type: 'error' }, ...notifications ]);
+        return;
+      }
+      setNotifications([
+        {
+          id: `notif-${Date.now()}`,
+          message: `Blockchain: Task created! Tx: ${tx.hash}, Task ID: ${taskId}`,
+          type: "success",
+        },
+        ...notifications,
+      ]);
+
+      // Insert into Supabase using contract taskId
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert([
+          {
+            tid: taskId,
+            id: newTask.child,
+            title: newTask.title,
+            description: newTask.description,
+            reward: newTask.reward,
+          },
+        ])
+        .select();
+      if (error) {
+        setNotifications([
+          {
+            id: `notif-${Date.now()}`,
+            message: `Supabase error: ${error.message}`,
+            type: "error",
+          },
+          ...notifications,
+        ]);
+        throw new Error(error.message);
+      }
+      if (!data || data.length === 0) {
+        setNotifications([
+          {
+            id: `notif-${Date.now()}`,
+            message: `No data returned from insert`,
+            type: "error",
+          },
+          ...notifications,
+        ]);
+        throw new Error('No data returned from insert');
+      }
+      const taskWithId: Task = {
+        ...newTask,
+        child: child.name,
+        id: `task-${taskId}`,
+        tid: taskId,
+        status: "pending",
+      };
+      setTasks([...tasks, taskWithId]);
+      setNotifications([
+        {
+          id: `notif-${Date.now()}`,
+          message: `New task "${newTask.title}" created for ${child.name}!`,
+          type: "success",
+        },
+        ...notifications,
+      ]);
+    } catch (err: any) {
+      setNotifications([
+        {
+          id: `notif-${Date.now()}`,
+          message: `Blockchain error: ${err.message}`,
+          type: "error",
+        },
+        ...notifications,
+      ]);
+      console.error('Blockchain error:', err);
     }
-
-    if (!data || data.length === 0) {
-      throw new Error('No data returned from insert')
-    }
-
-    const taskWithId: Task = {
-      ...newTask,
-      child: child.name,
-      id: `task-${data[0].tid}`,
-      status: "pending" as const,
-    }
-    setTasks([...tasks, taskWithId])
-
-    // Add notification
-    setNotifications([
-      {
-        id: `notif-${Date.now()}`,
-        message: `New task "${newTask.title}" created for ${child.name}!`,
-        type: "success",
-      },
-      ...notifications,
-    ])
   }
 
   const handleAddChild = async (newChild: {
@@ -254,7 +327,7 @@ export default function Dashboard() {
         {
           id: `notif-${Date.now()}`,
           message: "Failed to add child. Please try again.",
-          type: "error",
+          type: "success",
         },
         ...notifications,
       ])
@@ -388,7 +461,7 @@ export default function Dashboard() {
         {
           id: `notif-${Date.now()}`,
           message: error.message || "Failed to connect wallet. Please try again.",
-          type: "error",
+          type: "success",
         },
         ...notifications,
       ]);
@@ -407,6 +480,44 @@ export default function Dashboard() {
         .eq('tid', taskId)
 
       if (error) throw error
+
+      // If approved, also call contract releaseTask
+      if (status === 'completed') {
+        try {
+          if (typeof window.ethereum === 'undefined') {
+            setNotifications([
+              { id: `notif-${Date.now()}`, message: 'Please install MetaMask', type: 'success' }, ...notifications ]);
+            return;
+          }
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            TASK_REGISTRY_ADDRESS,
+            taskRegistryABI.output.abi,
+            signer
+          );
+          const tx = await contract.release(taskId);
+          await tx.wait();
+          setNotifications([
+            {
+              id: `notif-${Date.now()}`,
+              message: `Blockchain: Task released! Tx: ${tx.hash}`,
+              type: "success",
+            },
+            ...notifications,
+          ]);
+        } catch (err: any) {
+          setNotifications([
+            {
+              id: `notif-${Date.now()}`,
+              message: `Blockchain error: ${err.message}`,
+              type: "success",
+            },
+            ...notifications,
+          ]);
+          console.error('Blockchain error:', err);
+        }
+      }
 
       // Update local state
       setTasks(tasks.map(task => 

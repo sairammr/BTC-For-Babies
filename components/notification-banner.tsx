@@ -6,7 +6,7 @@ import { X, CheckCircle, AlertTriangle, Info } from "lucide-react"
 interface NotificationBannerProps {
   id: string
   message: string
-  type: "success" | "warning" | "info"
+  type: "success" | "warning" | "info" | "error"
   onClose: () => void
 }
 
@@ -41,6 +41,8 @@ export default function NotificationBanner({ id, message, type, onClose }: Notif
         return "bg-[#FFF4C9]/30 border-[#FFF4C9]"
       case "info":
         return "bg-[#C9E4FF]/30 border-[#C9E4FF]"
+      case "error":
+        return "bg-[#F8C6D2]/30 border-[#F8C6D2]"
       default:
         return "bg-[#D9CFF3]/30 border-[#D9CFF3]"
     }
@@ -54,6 +56,8 @@ export default function NotificationBanner({ id, message, type, onClose }: Notif
         return <AlertTriangle className="w-5 h-5 text-[#4B5563]" />
       case "info":
         return <Info className="w-5 h-5 text-[#4B5563]" />
+      case "error":
+        return <X className="w-5 h-5 text-[#B91C1C]" />
       default:
         return <CheckCircle className="w-5 h-5 text-[#4B5563]" />
     }
