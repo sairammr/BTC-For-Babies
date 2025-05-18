@@ -27,12 +27,17 @@ export default function AddTaskModal({ onClose, onAddTask, children }: AddTaskMo
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (!selectedChild) {
+      console.error('Please select a child');
+      return;
+    }
+
     // Create new task object
     const newTask = {
       title: taskName,
       description,
       reward: Number.parseFloat(reward),
-      child: children.find((child) => child.id === selectedChild)?.name || selectedChild,
+      child: selectedChild,
       icon,
     }
 
@@ -107,9 +112,15 @@ export default function AddTaskModal({ onClose, onAddTask, children }: AddTaskMo
                   Assign To
                   <span className="text-[#F8C6D2] ml-1">*</span>
                 </Label>
-                <Select value={selectedChild} onValueChange={setSelectedChild} required>
-                  <SelectTrigger className="border-[#C9E4FF] focus:ring-[#C9E4FF] shadow-sm">
-                    <SelectValue placeholder="Select child" />
+                <Select 
+                  value={selectedChild}
+                  onValueChange={setSelectedChild}
+                  required
+                >
+                  <SelectTrigger id="child" className="border-[#C9E4FF] focus:ring-[#C9E4FF] shadow-sm">
+                    <SelectValue>
+                      {selectedChild ? children.find(child => child.id === selectedChild)?.name : "Select child"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {children.map((child) => (

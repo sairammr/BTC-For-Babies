@@ -1,7 +1,7 @@
 "use client"
 
 import { ThemeProvider } from "next-themes"
-import { TaskProvider } from "@/context/task-context"
+import { TaskProvider } from "@/lib/task-store"
 import { useEffect, useState } from "react"
 import "./globals.css"
 

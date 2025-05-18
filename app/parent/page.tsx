@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Bell, CheckCircle, Clipboard, Cog, Coins, Home, Plus, Users } from "lucide-react"
+import { Bell, CheckCircle, Clipboard, Cog, Coins, Home, Plus, Users, X } from "lucide-react"
 import TaskCard from "@/components/task-card"
 import ChildProfile from "@/components/child-profile"
 import SavingsVault from "@/components/savings-vault"
@@ -14,9 +14,12 @@ import AddTaskModal from "@/components/add-task-modal"
 import AddChildModal from "@/components/add-child-modal"
 import ConnectWalletModal from "@/components/connect-wallet-modal"
 import TaskCardV2 from "@/components/ui/task-card-v2"
-import supabase  from "../../tools/supabaseConfig"
+import supabase from "../../tools/supabaseConfig"
 import { ethers } from 'ethers'
 import GetAccountDetails from "@/hooks/getAccountdetails"
+import { useRouter } from "next/navigation"
+import PageTitle from "@/components/page-title"
+import PixelatedContainer from "@/components/pixelated-container"
 
 interface Child {
   id: string;
@@ -24,6 +27,17 @@ interface Child {
   tasksCompleted: number;
   totalRewards: number;
   walletAddress: string;
+}
+
+interface Task {
+  id: string;
+  title: string;
+  description: string;
+  status: "pending" | "completed" | "submitted" | "rejected";
+  child: string;
+  reward: number;
+  icon: string;
+  tid?: number;
 }
 
 // Update ExSat network configuration with exact details
@@ -43,7 +57,7 @@ export default function Dashboard() {
   const [showAddTask, setShowAddTask] = useState(false)
   const [showAddChild, setShowAddChild] = useState(false)
   const [showConnectWallet, setShowConnectWallet] = useState(false)
-  const [tasks, setTasks] = useState([])
+  const [tasks, setTasks] = useState<Task[]>([])
   const [children, setChildren] = useState<Child[]>([])
   const [isWalletConnected, setIsWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState("")
@@ -51,7 +65,10 @@ export default function Dashboard() {
     { id: "notif-1", message: "Task completed by Emma!", type: "success" as const },
   ])
   const [isLoading, setIsLoading] = useState(true)
-  const [parentWallet, setParentWallet] = useState("");
+  const [parentWallet, setParentWallet] = useState("")
+  const [activeTab, setActiveTab] = useState<"all" | "review" | "completed">("all")
+  const [activeTaskFilter, setActiveTaskFilter] = useState<"all" | "pending" | "completed" | "review">("all")
+  const router = useRouter()
 
   useEffect(() => {
     const fetchChildren = async () => {
@@ -66,11 +83,10 @@ export default function Dashboard() {
         }
 
         if (data) {
-          // Map the data to match the expected format
           const formattedChildren = data.map(child => ({
             id: child.id,
             name: child.child_name || '',
-            tasksCompleted:0,
+            tasksCompleted: 0,
             totalRewards: 0,
             walletAddress: child.child_wallet || ''
           }))
@@ -86,24 +102,85 @@ export default function Dashboard() {
     fetchChildren()
   }, [])
 
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('tasks')
+          .select(`
+            *,
+            children:children(id, child_name)
+          `)
+        
+        if (error) {
+          throw error
+        }
+
+        if (data) {
+          const formattedTasks = data.map(task => ({
+            id: `task-${task.tid}`,
+            tid: task.tid,
+            title: task.title,
+            description: task.description,
+            status: task.status === 'assigned' ? 'pending' : task.status,
+            child: task.children?.child_name || '',
+            reward: task.reward,
+            icon: "Broom"
+          }))
+          setTasks(formattedTasks)
+        }
+      } catch (error) {
+        console.error('Error fetching tasks:', error)
+      }
+    }
+
+    fetchTasks()
+  }, [])
+
   // Add this useEffect for wallet initialization
   useEffect(() => {
     const wallet = GetAccountDetails();
     setParentWallet(wallet);
   }, []);
 
-  // Add a new task
-  const handleAddTask = (newTask: {
+  const handleAddTask = async(newTask: {
     title: string;
     description: string;
     child: string;
     reward: number;
     icon: string;
   }) => {
-    const taskWithId = {
+    // Find the child's name from the children array
+    const child = children.find(child => String(child.id) === newTask.child);
+    if (!child) {
+      console.error('Child not found:', newTask.child);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([{
+        id:newTask.child,
+        title:newTask.title,
+        description:newTask.description,
+        reward:newTask.reward,
+      }])
+      .select()
+
+    if (error) {
+      console.error('Supabase error:', error.message)
+      throw new Error(error.message)
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error('No data returned from insert')
+    }
+
+    const taskWithId: Task = {
       ...newTask,
-      id: `task-${Date.now()}`,
-      status: "pending",
+      child: child.name,
+      id: `task-${data[0].tid}`,
+      status: "pending" as const,
     }
     setTasks([...tasks, taskWithId])
 
@@ -111,14 +188,13 @@ export default function Dashboard() {
     setNotifications([
       {
         id: `notif-${Date.now()}`,
-        message: `New task "${newTask.title}" created for ${newTask.child}!`,
+        message: `New task "${newTask.title}" created for ${child.name}!`,
         type: "success",
       },
       ...notifications,
     ])
   }
 
-  // Add a new child
   const handleAddChild = async (newChild: {
     name: string;
     age: number;
@@ -185,20 +261,25 @@ export default function Dashboard() {
     }
   }
 
-  // Update task
-    const handleUpdateTask = (updatedTask: {
+  const handleUpdateTask = async(updatedTask: {
     id: string;
     title: string;
     description: string;
-    status: "pending" | "completed";
+    status: "pending" | "completed" | "submitted" | "rejected";
     child: string;
     reward: number;
     icon: string;
   }) => {
-    setTasks(tasks.map((task) => (task.id === updatedTask.id ? { ...task, ...updatedTask } : task)))
+    // Find the child's name from the children array
+    const childName = children.find(child => child.id === updatedTask.child)?.name || updatedTask.child;
+
+    setTasks(tasks.map((task) => 
+      task.id === updatedTask.id 
+        ? { ...task, ...updatedTask, child: childName }
+        : task
+    ))
   }
 
-  // Delete task
   const handleDeleteTask = (taskId: string) => {
     setTasks(tasks.filter((task) => task.id !== taskId))
 
@@ -212,11 +293,12 @@ export default function Dashboard() {
       ...notifications,
     ])
   }
-const handleWalletDisconnect = () => {
-  setIsWalletConnected(false)
-  setWalletAddress("")
-}
-  // Handle wallet connection
+
+  const handleWalletDisconnect = () => {
+    setIsWalletConnected(false)
+    setWalletAddress("")
+  }
+
   const handleWalletConnect = async () => {
     try {
       if (typeof window.ethereum === 'undefined') {
@@ -313,10 +395,60 @@ const handleWalletDisconnect = () => {
     }
   };
 
-  // Remove notification
   const removeNotification = (id: string) => {
     setNotifications(notifications.filter((notif) => notif.id !== id))
   }
+
+  const handleTaskReview = async (taskId: number, status: 'completed' | 'rejected') => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status })
+        .eq('tid', taskId)
+
+      if (error) throw error
+
+      // Update local state
+      setTasks(tasks.map(task => 
+        task.tid === taskId 
+          ? { ...task, status }
+          : task
+      ))
+
+      // Show success notification
+      setNotifications([
+        {
+          id: `notif-${Date.now()}`,
+          message: `Task ${status === 'completed' ? 'approved' : 'rejected'} successfully!`,
+          type: "success"
+        },
+        ...notifications
+      ])
+    } catch (error) {
+      console.error('Error updating task:', error)
+      setNotifications([
+        {
+          id: `notif-${Date.now()}`,
+          message: 'Failed to update task status',
+          type: "success"
+        },
+        ...notifications
+      ])
+    }
+  }
+
+  const filteredTasks = tasks.filter(task => {
+    switch (activeTaskFilter) {
+      case "pending":
+        return task.status === "pending"
+      case "completed":
+        return task.status === "completed"
+      case "review":
+        return task.status === "submitted"
+      default:
+        return true
+    }
+  })
 
   return (
     <div className="min-h-screen bg-[#F5F5F5] bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0wIDBoNDB2NDBoLTQweiIvPjxwYXRoIGQ9Ik0zNiA0djRoLTR2LTRoNHptLTggMHY0aC00di00aDR6bS04IDB2NGgtNHYtNGg0em0tOCAwdjRoLTR2LTRoNHptLTggMHY0aC00di00aDR6bTMyIDh2NGgtNHYtNGg0em0tMzIgMHY0aC00di00aDR6bTMyIDh2NGgtNHYtNGg0em0tMzIgMHY0aC00di00aDR6bTMyIDh2NGgtNHYtNGg0em0tOCAwdjRoLTR2LTRoNHptLTggMHY0aC00di00aDR6bS04IDB2NGgtNHYtNGg0em0tOCAwdjRoLTR2LTRoNHoiIGZpbGw9IiNGOEM2RDIiIGZpbGwtb3BhY2l0eT0iLjAyIi8+PC9nPjwvc3ZnPg==')] font-sans">
@@ -330,7 +462,7 @@ const handleWalletDisconnect = () => {
             BTC for Babies
           </h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <div className="relative">
             <button className="relative p-2 hover:bg-[#F5F5F5] rounded-full transition-colors">
               <Bell className="w-6 h-6 text-[#4B5563]" />
@@ -342,23 +474,24 @@ const handleWalletDisconnect = () => {
 
           <Button className={`${
               isWalletConnected ? "bg-[#C4E4D2] hover:bg-[#C4E4D2]/80" : "bg-[#FFF4C9] hover:bg-[#FFF4C9]/80"
-            } text-[#4B5563] hidden md:flex transition-all duration-300 shadow-sm`} onClick={() => handleWalletConnect()}>
+            } text-[#4B5563] transition-all duration-300 shadow-sm`} onClick={() => handleWalletConnect()}>
             <Coins className="w-4 h-4 mr-2" />
             {isWalletConnected ? (
               <span className="font-mono text-xs">
                 {walletAddress.substring(0, 4)}...{walletAddress.substring(walletAddress.length - 4)}
               </span>
             ) : (
-              "Connect Wallet"
+              "Connect"
             )}
           </Button>
           
           {isWalletConnected && (
-            <Button 
-              className="bg-red-500 hover:bg-red-600 text-white hidden md:flex transition-all duration-300 shadow-sm"
+            <Button
+              className="bg-red-500 hover:bg-red-600 text-white transition-all duration-300 shadow-sm"
               onClick={handleWalletDisconnect}
             >
-              Disconnect
+              <span className="hidden sm:inline">Disconnect</span>
+              <X className="w-4 h-4 sm:hidden" />
             </Button>
           )}
         </div>
@@ -386,38 +519,38 @@ const handleWalletDisconnect = () => {
               value="tasks"
               className="data-[state=active]:bg-[#F8C6D2] data-[state=active]:text-[#4B5563] rounded-lg"
             >
-              <Home className="w-5 h-5 mr-2" />
+              <Home className="w-5 h-5 sm:mr-2" />
               <span className="hidden sm:inline">Tasks</span>
             </TabsTrigger>
             <TabsTrigger
               value="children"
               className="data-[state=active]:bg-[#C9E4FF] data-[state=active]:text-[#4B5563] rounded-lg"
             >
-              <Users className="w-5 h-5 mr-2" />
+              <Users className="w-5 h-5 sm:mr-2" />
               <span className="hidden sm:inline">Children</span>
             </TabsTrigger>
             <TabsTrigger
               value="rewards"
               className="data-[state=active]:bg-[#C4E4D2] data-[state=active]:text-[#4B5563] rounded-lg"
             >
-              <Coins className="w-5 h-5 mr-2" />
+              <Coins className="w-5 h-5 sm:mr-2" />
               <span className="hidden sm:inline">Rewards</span>
             </TabsTrigger>
             <TabsTrigger
               value="history"
               className="data-[state=active]:bg-[#D9CFF3] data-[state=active]:text-[#4B5563] rounded-lg"
             >
-              <Clipboard className="w-5 h-5 mr-2" />
+              <Clipboard className="w-5 h-5 sm:mr-2" />
               <span className="hidden sm:inline">History</span>
             </TabsTrigger>
           </TabsList>
 
           {/* Tasks Tab */}
           <TabsContent value="tasks" className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
               <h2 className="text-xl font-bold text-[#4B5563]">Tasks</h2>
               <Button
-                className="bg-[#C9E4FF] hover:bg-[#B0D5F7] text-[#4B5563] shadow-sm transition-all duration-200 hover:shadow"
+                className="bg-[#C9E4FF] hover:bg-[#B0D5F7] text-[#4B5563] shadow-sm transition-all duration-200 hover:shadow w-full sm:w-auto"
                 onClick={() => setShowAddTask(true)}
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -428,50 +561,88 @@ const handleWalletDisconnect = () => {
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
               <Button
                 variant="outline"
-                className="bg-white border-[#F8C6D2] text-[#4B5563] hover:bg-[#F8C6D2]/10 shadow-sm"
+                className={`bg-white border-[#F8C6D2] text-[#4B5563] hover:bg-[#F8C6D2]/10 shadow-sm whitespace-nowrap ${
+                  activeTaskFilter === "all" ? "bg-[#F8C6D2]/10" : ""
+                }`}
+                onClick={() => setActiveTaskFilter("all")}
               >
                 All Tasks
               </Button>
               <Button
                 variant="outline"
-                className="bg-white border-[#C4E4D2] text-[#4B5563] hover:bg-[#C4E4D2]/10 shadow-sm"
+                className={`bg-white border-[#C4E4D2] text-[#4B5563] hover:bg-[#C4E4D2]/10 shadow-sm whitespace-nowrap ${
+                  activeTaskFilter === "pending" ? "bg-[#C4E4D2]/10" : ""
+                }`}
+                onClick={() => setActiveTaskFilter("pending")}
               >
                 Pending
               </Button>
               <Button
                 variant="outline"
-                className="bg-white border-[#D9CFF3] text-[#4B5563] hover:bg-[#D9CFF3]/10 shadow-sm"
+                className={`bg-white border-[#D9CFF3] text-[#4B5563] hover:bg-[#D9CFF3]/10 shadow-sm whitespace-nowrap ${
+                  activeTaskFilter === "completed" ? "bg-[#D9CFF3]/10" : ""
+                }`}
+                onClick={() => setActiveTaskFilter("completed")}
               >
                 Completed
               </Button>
+              <Button
+                variant="outline"
+                className={`bg-white border-[#C9E4FF] text-[#4B5563] hover:bg-[#C9E4FF]/10 shadow-sm whitespace-nowrap ${
+                  activeTaskFilter === "review" ? "bg-[#C9E4FF]/10" : ""
+                }`}
+                onClick={() => setActiveTaskFilter("review")}
+              >
+                Review
+              </Button>
             </div>
 
-            {tasks.length === 0 ? (
+            {filteredTasks.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-dashed border-[#E5E7EB]">
                 <div className="w-16 h-16 mx-auto bg-[#F5F5F5] rounded-full flex items-center justify-center mb-4">
                   <Clipboard className="w-8 h-8 text-[#9CA3AF]" />
                 </div>
-                <h3 className="text-[#4B5563] font-medium mb-2">No tasks yet</h3>
-                <p className="text-[#6B7280] text-sm mb-4">Create your first task to get started</p>
-                <Button className="bg-[#C9E4FF] hover:bg-[#B0D5F7] text-[#4B5563]" onClick={() => setShowAddTask(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Task
-                </Button>
+                <h3 className="text-[#4B5563] font-medium mb-2">
+                  {activeTaskFilter === "review" 
+                    ? "No tasks to review" 
+                    : activeTaskFilter === "completed"
+                    ? "No completed tasks"
+                    : activeTaskFilter === "pending"
+                    ? "No pending tasks"
+                    : "No tasks yet"}
+                </h3>
+                <p className="text-[#6B7280] text-sm mb-4">
+                  {activeTaskFilter === "review"
+                    ? "There are no tasks waiting for review"
+                    : activeTaskFilter === "completed"
+                    ? "Tasks will appear here once completed"
+                    : activeTaskFilter === "pending"
+                    ? "Tasks will appear here when assigned"
+                    : "Create your first task to get started"}
+                </p>
+                {activeTaskFilter === "all" && (
+                  <Button className="bg-[#C9E4FF] hover:bg-[#B0D5F7] text-[#4B5563]" onClick={() => setShowAddTask(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Task
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="grid gap-4">
-                {tasks.map((task) => (
+                {filteredTasks.map((task) => (
                   <TaskCardV2
                     key={task.id}
                     id={task.id}
                     title={task.title}
                     description={task.description}
-                    status={task.status as "pending" | "completed"}
+                    status={task.status}
                     child={task.child}
                     reward={task.reward}
                     icon={task.icon as "Broom" | "BookOpen" | "Bone"}
                     onUpdate={handleUpdateTask}
                     onDelete={handleDeleteTask}
+                    onReview={task.status === 'submitted' ? handleTaskReview : undefined}
+                    tid={task.tid}
                   />
                 ))}
               </div>
@@ -480,10 +651,10 @@ const handleWalletDisconnect = () => {
 
           {/* Children Tab */}
           <TabsContent value="children" className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
               <h2 className="text-xl font-bold text-[#4B5563]">Children</h2>
               <Button
-                className="bg-[#F8C6D2] hover:bg-[#F8C6D2]/80 text-[#4B5563] shadow-sm transition-all duration-200 hover:shadow"
+                className="bg-[#C9E4FF] hover:bg-[#B0D5F7] text-[#4B5563] shadow-sm transition-all duration-200 hover:shadow w-full sm:w-auto"
                 onClick={() => setShowAddChild(true)}
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -491,34 +662,54 @@ const handleWalletDisconnect = () => {
               </Button>
             </div>
 
-            {isLoading ? (
-              <div className="text-center py-12">
-                <p>Loading children...</p>
-              </div>
-            ) : children.length === 0 ? (
+            {children.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-dashed border-[#E5E7EB]">
                 <div className="w-16 h-16 mx-auto bg-[#F5F5F5] rounded-full flex items-center justify-center mb-4">
                   <Users className="w-8 h-8 text-[#9CA3AF]" />
                 </div>
-                <h3 className="text-[#4B5563] font-medium mb-2">No children added</h3>
-                <p className="text-[#6B7280] text-sm mb-4">Add your first child to get started</p>
-                <Button
-                  className="bg-[#F8C6D2] hover:bg-[#F8C6D2]/80 text-[#4B5563]"
-                  onClick={() => setShowAddChild(true)}
-                >
+                <h3 className="text-[#4B5563] font-medium mb-2">No children added yet</h3>
+                <p className="text-[#6B7280] text-sm mb-4">
+                  Add your children to start assigning tasks and tracking their progress
+                </p>
+                <Button className="bg-[#C9E4FF] hover:bg-[#B0D5F7] text-[#4B5563]" onClick={() => setShowAddChild(true)}>
                   <Plus className="w-4 h-4 mr-2" />
                   Add Child
                 </Button>
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4">
                 {children.map((child) => (
-                  <ChildProfile
-                    key={child.id}
-                    name={child.name}
-                    tasksCompleted={child.tasksCompleted}
-                    totalRewards={child.totalRewards}
-                  />
+                  <Card key={child.id} className="border-[#E5E7EB] bg-white shadow-sm hover:shadow transition-all duration-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-[#F5F5F5] rounded-full flex items-center justify-center">
+                            <Users className="w-6 h-6 text-[#4B5563]" />
+                          </div>
+                          <div>
+                            <h3 className="font-medium text-[#4B5563]">{child.name}</h3>
+                            <div className="flex items-center gap-4 mt-1">
+                              <span className="text-xs text-[#6B7280]">
+                                Tasks Completed: {child.tasksCompleted}
+                              </span>
+                              <span className="text-xs text-[#6B7280]">
+                                Total Rewards: {child.totalRewards} BTC
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            className="border-[#E5E7EB] text-[#4B5563] hover:border-[#C9E4FF]"
+                          >
+                            <Coins className="w-4 h-4 mr-2" />
+                            View Wallet
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             )}
@@ -526,88 +717,124 @@ const handleWalletDisconnect = () => {
 
           {/* Rewards Tab */}
           <TabsContent value="rewards" className="space-y-4">
-            <h2 className="text-xl font-bold text-[#4B5563]">Rewards</h2>
-            {children.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl border border-dashed border-[#E5E7EB]">
-                <div className="w-16 h-16 mx-auto bg-[#F5F5F5] rounded-full flex items-center justify-center mb-4">
-                  <Coins className="w-8 h-8 text-[#9CA3AF]" />
-                </div>
-                <h3 className="text-[#4B5563] font-medium mb-2">No rewards yet</h3>
-                <p className="text-[#6B7280] text-sm mb-4">Add children and complete tasks to see rewards</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {children.map((child) => (
-                    <SavingsVault key={child.id} childName={child.name} balance={child.totalRewards} />
-                  ))}
-                </div>
-                <Card className="shadow-sm">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-[#4B5563]">Rewards</h2>
+            </div>
+
+            <div className="grid gap-4">
+              {/* Total Rewards Card */}
+              <Card className="border-[#E5E7EB] bg-white shadow-sm">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-medium text-[#6B7280]">Total Rewards Distributed</h3>
+                      <p className="text-xl sm:text-2xl font-bold text-[#4B5563] mt-1">
+                        {children.reduce((total, child) => total + child.totalRewards, 0)} BTC
+                      </p>
+                    </div>
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#C4E4D2]/30 rounded-full flex items-center justify-center">
+                      <Coins className="w-5 h-5 sm:w-6 sm:h-6 text-[#4B5563]" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Children Rewards List */}
+              {children.map((child) => (
+                <Card key={child.id} className="border-[#E5E7EB] bg-white shadow-sm">
                   <CardContent className="p-4">
-                    <h3 className="text-lg font-bold text-[#4B5563] mb-2">Transaction History</h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between py-2 px-3 bg-white rounded border border-[#E5E7EB]">
-                        <div>
-                          <p className="text-[#4B5563]">0.002 BTC approved for Homework</p>
-                          <p className="text-xs text-[#6B7280]">Emma • Today, 3:45 PM</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#F5F5F5] rounded-full flex items-center justify-center">
+                          <Users className="w-5 h-5 sm:w-6 sm:h-6 text-[#4B5563]" />
                         </div>
-                        <Badge className="bg-[#C4E4D2] text-[#4B5563] hover:bg-[#C4E4D2]">Approved</Badge>
+                        <div>
+                          <h3 className="font-medium text-[#4B5563]">{child.name}</h3>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1">
+                            <span className="text-xs sm:text-sm text-[#6B7280]">
+                              Tasks Completed: {child.tasksCompleted}
+                            </span>
+                            <span className="text-xs sm:text-sm text-[#6B7280]">
+                              Rewards Earned: {child.totalRewards} BTC
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between py-2 px-3 bg-[#F5F5F5] rounded border border-[#E5E7EB]">
-                        <div>
-                          <p className="text-[#4B5563]">0.001 BTC approved for Dishes</p>
-                          <p className="text-xs text-[#6B7280]">Jack • Yesterday, 6:20 PM</p>
-                        </div>
-                        <Badge className="bg-[#C4E4D2] text-[#4B5563] hover:bg-[#C4E4D2]">Approved</Badge>
-                      </div>
-                      <div className="flex justify-between py-2 px-3 bg-white rounded border border-[#E5E7EB]">
-                        <div>
-                          <p className="text-[#4B5563]">0.0005 BTC approved for Pet Care</p>
-                          <p className="text-xs text-[#6B7280]">Jack • Yesterday, 5:15 PM</p>
-                        </div>
-                        <Badge className="bg-[#C4E4D2] text-[#4B5563] hover:bg-[#C4E4D2]">Approved</Badge>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          className="border-[#E5E7EB] text-[#4B5563] hover:border-[#C9E4FF] w-full sm:w-auto"
+                        >
+                          <Coins className="w-4 h-4 mr-2" />
+                          View Transactions
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-              </>
-            )}
+              ))}
+            </div>
           </TabsContent>
 
           {/* History Tab */}
           <TabsContent value="history" className="space-y-4">
-            <h2 className="text-xl font-bold text-[#4B5563]">Activity History</h2>
-            <Card className="shadow-sm">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-start gap-3 py-2 border-b border-[#E5E7EB]">
-                  <div className="bg-[#F8C6D2] rounded-full p-2 mt-1">
-                    <CheckCircle className="w-4 h-4 text-[#4B5563]" />
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-[#4B5563]">Task History</h2>
+            </div>
+
+            <div className="grid gap-4">
+              {tasks.filter(task => task.status === 'completed' || task.status === 'rejected').length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-xl border border-dashed border-[#E5E7EB]">
+                  <div className="w-16 h-16 mx-auto bg-[#F5F5F5] rounded-full flex items-center justify-center mb-4">
+                    <Clipboard className="w-8 h-8 text-[#9CA3AF]" />
                   </div>
-                  <div>
-                    <p className="text-[#4B5563] font-medium">Emma completed "Homework"</p>
-                    <p className="text-xs text-[#6B7280]">Today, 3:45 PM</p>
-                  </div>
+                  <h3 className="text-[#4B5563] font-medium mb-2">No task history yet</h3>
+                  <p className="text-[#6B7280] text-sm">
+                    Completed and rejected tasks will appear here
+                  </p>
                 </div>
-                <div className="flex items-start gap-3 py-2 border-b border-[#E5E7EB]">
-                  <div className="bg-[#C4E4D2] rounded-full p-2 mt-1">
-                    <Coins className="w-4 h-4 text-[#4B5563]" />
-                  </div>
-                  <div>
-                    <p className="text-[#4B5563] font-medium">0.002 BTC added to Emma's savings</p>
-                    <p className="text-xs text-[#6B7280]">Today, 3:46 PM</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 py-2 border-b border-[#E5E7EB]">
-                  <div className="bg-[#D9CFF3] rounded-full p-2 mt-1">
-                    <Plus className="w-4 h-4 text-[#4B5563]" />
-                  </div>
-                  <div>
-                    <p className="text-[#4B5563] font-medium">New task "Feed the dog" created for Jack</p>
-                    <p className="text-xs text-[#6B7280]">Today, 2:30 PM</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              ) : (
+                tasks
+                  .filter(task => task.status === 'completed' || task.status === 'rejected')
+                  .map((task) => (
+                    <Card key={task.id} className="border-[#E5E7EB] bg-white shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center ${
+                              task.status === 'completed' ? 'bg-[#C4E4D2]/30' : 'bg-[#F8C6D2]/30'
+                            }`}>
+                              {task.status === 'completed' ? (
+                                <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-[#4B5563]" />
+                              ) : (
+                                <X className="w-5 h-5 sm:w-6 sm:h-6 text-[#4B5563]" />
+                              )}
+                            </div>
+                            <div>
+                              <h3 className="font-medium text-[#4B5563]">{task.title}</h3>
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1">
+                                <span className="text-xs sm:text-sm text-[#6B7280]">
+                                  Assigned to: {task.child}
+                                </span>
+                                <span className="text-xs sm:text-sm text-[#6B7280]">
+                                  Reward: {task.reward} BTC
+                                </span>
+                                <Badge className={`${
+                                  task.status === 'completed' 
+                                    ? 'bg-[#C4E4D2] text-[#4B5563]' 
+                                    : 'bg-[#F8C6D2] text-[#4B5563]'
+                                }`}>
+                                  {task.status === 'completed' ? 'Completed' : 'Rejected'}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </main>
@@ -619,9 +846,7 @@ const handleWalletDisconnect = () => {
 
       {showAddChild && <AddChildModal onClose={() => setShowAddChild(false)} onAddChild={handleAddChild} />}
 
-   
-
-      
+      {showConnectWallet && <ConnectWalletModal onClose={() => setShowConnectWallet(false)} onConnect={handleWalletConnect} />}
     </div>
   )
 }

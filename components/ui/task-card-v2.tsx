@@ -3,7 +3,7 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { BrushIcon as Broom, BookOpen, Bone, Edit, Check, Sparkles } from "lucide-react"
+import { BrushIcon as Broom, BookOpen, Bone, Edit, Check, X, Sparkles } from "lucide-react"
 import { useState } from "react"
 import EditTaskModal from "@/components/edit-task-modal"
 
@@ -11,12 +11,14 @@ interface TaskCardProps {
   id: string
   title: string
   description: string
-  status: "pending" | "completed"
+  status: "pending" | "completed" | "submitted" | "rejected"
   child: string
   reward: number
   icon: "Broom" | "BookOpen" | "Bone"
   onUpdate: (task: any) => void
   onDelete: (id: string) => void
+  onReview?: (taskId: number, status: 'completed' | 'rejected') => void
+  tid?: number
 }
 
 export default function TaskCardV2({
@@ -29,6 +31,8 @@ export default function TaskCardV2({
   icon,
   onUpdate,
   onDelete,
+  onReview,
+  tid
 }: TaskCardProps) {
   const [currentStatus, setCurrentStatus] = useState(status)
   const [showApproved, setShowApproved] = useState(false)
@@ -36,13 +40,15 @@ export default function TaskCardV2({
   const [isHovered, setIsHovered] = useState(false)
 
   const handleApprove = () => {
-    setCurrentStatus("completed")
-    setShowApproved(true)
+    if (tid && onReview) {
+      onReview(tid, 'completed')
+    }
+  }
 
-    // Update the task status
-    onUpdate({ id, status: "completed" })
-
-    setTimeout(() => setShowApproved(false), 3000)
+  const handleReject = () => {
+    if (tid && onReview) {
+      onReview(tid, 'rejected')
+    }
   }
 
   const getIcon = () => {
@@ -55,6 +61,32 @@ export default function TaskCardV2({
         return <Bone className="w-5 h-5 text-[#4B5563]" />
       default:
         return <Broom className="w-5 h-5 text-[#4B5563]" />
+    }
+  }
+
+  const getStatusColor = () => {
+    switch (currentStatus) {
+      case "completed":
+        return "bg-[#C4E4D2] text-[#4B5563]"
+      case "submitted":
+        return "bg-[#C9E4FF] text-[#4B5563]"
+      case "rejected":
+        return "bg-[#F8C6D2] text-[#4B5563]"
+      default:
+        return "bg-[#FFF4C9] text-[#4B5563]"
+    }
+  }
+
+  const getStatusText = () => {
+    switch (currentStatus) {
+      case "completed":
+        return "Completed"
+      case "submitted":
+        return "Submitted"
+      case "rejected":
+        return "Rejected"
+      default:
+        return "Pending"
     }
   }
 
@@ -80,12 +112,8 @@ export default function TaskCardV2({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-medium text-[#4B5563] truncate">{title}</h3>
-                  <Badge
-                    className={`${
-                      currentStatus === "pending" ? "bg-[#FFF4C9] text-[#4B5563]" : "bg-[#C4E4D2] text-[#4B5563]"
-                    } hover:bg-opacity-80`}
-                  >
-                    {currentStatus === "pending" ? "Pending" : "Completed"}
+                  <Badge className={`${getStatusColor()} hover:bg-opacity-80`}>
+                    {getStatusText()}
                   </Badge>
                 </div>
                 <p className="text-xs text-[#6B7280] mt-1">{description}</p>
@@ -95,24 +123,34 @@ export default function TaskCardV2({
                   <span className="text-xs text-[#6B7280]">Reward: {reward} BTC</span>
                 </div>
               </div>
-              <div className="flex gap-2 mt-2 md:mt-0">
+              <div className="flex gap-2">
+                {currentStatus === "submitted" && onReview && (
+                  <>
+                    <Button
+                      onClick={handleApprove}
+                      className="bg-[#C4E4D2] hover:bg-[#B0D5C0] text-[#4B5563] h-9 shadow-sm transition-all duration-200 hover:shadow"
+                    >
+                      <Check className="w-4 h-4 mr-1" />
+                      Approve
+                    </Button>
+                    <Button
+                      onClick={handleReject}
+                      className="bg-[#F8C6D2] hover:bg-[#F8C6D2]/80 text-[#4B5563] h-9 shadow-sm transition-all duration-200 hover:shadow"
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Reject
+                    </Button>
+                  </>
+                )}
                 {currentStatus === "pending" && (
                   <Button
-                    onClick={handleApprove}
-                    className="bg-[#C4E4D2] hover:bg-[#B0D5C0] text-[#4B5563] h-9 shadow-sm transition-all duration-200 hover:shadow"
+                    onClick={() => setShowEditModal(true)}
+                    className="bg-[#C9E4FF] hover:bg-[#C9E4FF]/80 text-[#4B5563] h-9 shadow-sm transition-all duration-200 hover:shadow"
                   >
-                    <Check className="w-4 h-4 mr-1" />
-                    Approve
+                    <Edit className="w-4 h-4 mr-1" />
+                    Edit
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  className="border-[#E5E7EB] text-[#4B5563] h-9 shadow-sm transition-all duration-200 hover:shadow hover:border-[#C9E4FF]"
-                  onClick={() => setShowEditModal(true)}
-                >
-                  <Edit className="w-4 h-4 mr-1" />
-                  Edit
-                </Button>
               </div>
             </div>
           </div>
